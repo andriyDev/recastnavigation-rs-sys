@@ -6,5 +6,6 @@ version = "0.1.0"
 links = "Recast"
 
 [build-dependencies]
+bindgen = "0.64.0"
 cmake = "0.1.49"
 pkg-config = "0.3.26"

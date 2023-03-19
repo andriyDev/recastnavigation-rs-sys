@@ -15,6 +15,8 @@ fn main() {
     for lib in lib_names() {
         println!("cargo:rustc-link-lib=static={}", lib);
     }
+
+    generate_bindings();
 }
 
 fn is_windows() -> bool {
@@ -104,4 +106,23 @@ fn build_recast() -> PathBuf {
         .define("RECASTNAVIGATION_TESTS", "OFF");
     let lib_destination = lib_builder.build();
     lib_destination.join("lib")
+}
+
+fn generate_bindings() {
+    let bind_files = [("recastnavigation/Recast/Include/Recast.h", "recast.rs")];
+
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+
+    for (bind_src, bind_dst) in bind_files {
+        let bindings = bindgen::Builder::default()
+            .header(bind_src)
+            .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+            .clang_args(["-x", "c++"].iter())
+            .generate()
+            .expect("Unable to generate bindings.");
+
+        bindings
+            .write_to_file(out_path.join(bind_dst))
+            .expect("Couldn't write bindings!");
+    }
 }
