@@ -17,15 +17,31 @@ fn main() {
     }
 }
 
+fn is_windows() -> bool {
+    env::var("CARGO_CFG_WINDOWS").is_ok()
+}
+
+fn is_debug() -> bool {
+    env::var("DEBUG").unwrap() == "true"
+}
+
 fn lib_names() -> Vec<String> {
     let root_names = vec!["Recast", "Detour", "DetourCrowd", "DetourTileCache"];
-    if env::var("PROFILE").unwrap() == "debug" {
+    if is_windows() && is_debug() {
         root_names
             .iter()
             .map(|root| root.to_string() + "-d")
             .collect()
     } else {
         root_names.iter().map(|root| root.to_string()).collect()
+    }
+}
+
+fn lib_name_to_file_name(lib_name: &str) -> String {
+    if is_windows() {
+        format!("{}.lib", lib_name)
+    } else {
+        format!("lib{}.a", lib_name)
     }
 }
 
@@ -52,7 +68,12 @@ fn find_recast() -> Option<PathBuf> {
 
     let check_libs = lib_names
         .iter()
-        .map(|lib_name| lib_dir.join(lib_name.clone() + ".lib").as_path().exists())
+        .map(|lib_name| {
+            lib_dir
+                .join(lib_name_to_file_name(lib_name))
+                .as_path()
+                .exists()
+        })
         .collect::<Vec<bool>>();
     if check_libs.iter().all(|b| *b) {
         Some(lib_dir.clone())
