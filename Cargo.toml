@@ -7,5 +7,6 @@ links = "Recast"
 
 [build-dependencies]
 bindgen = "0.64.0"
+cc = "1.0.79"
 cmake = "0.1.49"
 pkg-config = "0.3.26"

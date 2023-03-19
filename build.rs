@@ -16,7 +16,10 @@ fn main() {
         println!("cargo:rustc-link-lib=static={}", lib);
     }
 
-    generate_bindings();
+    build_and_link_inline_lib();
+    generate_inline_bindings();
+
+    generate_recast_bindings();
 }
 
 fn is_windows() -> bool {
@@ -108,7 +111,7 @@ fn build_recast() -> PathBuf {
     lib_destination.join("lib")
 }
 
-fn generate_bindings() {
+fn generate_recast_bindings() {
     let bind_files = [("recastnavigation/Recast/Include/Recast.h", "recast.rs")];
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
@@ -125,4 +128,33 @@ fn generate_bindings() {
             .write_to_file(out_path.join(bind_dst))
             .expect("Couldn't write bindings!");
     }
+}
+
+fn build_and_link_inline_lib() {
+    println!("cargo:rerun-if-changed=inline_lib_src");
+
+    cc::Build::new()
+        .file("inline_lib_src/inline.cc")
+        .include("recastnavigation/Recast/Include")
+        .compile("recast_inline");
+
+    println!(
+        "cargo:rustc-link-search=native={}",
+        env::var("OUT_DIR").unwrap()
+    );
+    println!("cargo:rustc-link-lib=static=recast_inline");
+}
+
+fn generate_inline_bindings() {
+    let bindings = bindgen::Builder::default()
+        .header("inline_lib_src/inline.h")
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .clang_args(["-x", "c++"].iter())
+        .generate()
+        .expect("Unable to generate bindings.");
+
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    bindings
+        .write_to_file(out_path.join("inline.rs"))
+        .expect("Couldn't write bindings!");
 }
