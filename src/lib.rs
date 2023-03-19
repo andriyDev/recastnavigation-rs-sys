@@ -8,6 +8,9 @@ mod ffi_inline {
   include!(concat!(env!("OUT_DIR"), "/inline.rs"));
 }
 
+pub use ffi_inline::*;
+pub use ffi_recast::*;
+
 #[cfg(test)]
 mod tests {
   use crate::{ffi_inline::*, ffi_recast::*};
