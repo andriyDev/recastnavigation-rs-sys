@@ -7,3 +7,4 @@ links = "Recast"
 
 [build-dependencies]
 cmake = "0.1.49"
+pkg-config = "0.3.26"

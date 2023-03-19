@@ -30,7 +30,48 @@ fn lib_names() -> Vec<String> {
 }
 
 fn find_recast() -> Option<PathBuf> {
-    None
+    let lib = match pkg_config::Config::new().probe("recastnavigation") {
+        Ok(value) => value,
+        Err(error) => {
+            println!("pkg_config failed to find RecastNavigation: {}", error);
+            return None;
+        }
+    };
+
+    if lib.link_paths.len() != 1 {
+        println!(
+            "cargo:warning=Expected 1 link path from recastnavigation, got {:?}",
+            lib.link_paths
+        );
+        return None;
+    }
+
+    let lib_dir = &lib.link_paths[0];
+
+    let lib_names = lib_names();
+
+    let check_libs = lib_names
+        .iter()
+        .map(|lib_name| lib_dir.join(lib_name.clone() + ".lib").as_path().exists())
+        .collect::<Vec<bool>>();
+    if check_libs.iter().all(|b| *b) {
+        Some(lib_dir.clone())
+    } else {
+        let missing_libs = lib_names
+            .iter()
+            .zip(check_libs)
+            .filter_map(|(lib_name, present)| {
+                if present {
+                    None
+                } else {
+                    Some(lib_name.as_str())
+                }
+            })
+            .collect::<Vec<&str>>();
+        println!("cargo:warning=Found recastnavigation using pkgconfig at {}, but not all libraries were present. Missing libs: {:?}", lib_dir.display(), missing_libs);
+
+        None
+    }
 }
 
 fn build_recast() -> PathBuf {
