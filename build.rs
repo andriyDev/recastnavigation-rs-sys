@@ -148,6 +148,7 @@ fn build_and_link_inline_lib() {
 fn generate_inline_bindings() {
     let bindings = bindgen::Builder::default()
         .header("inline_lib_src/inline.h")
+        .blocklist_type("rcContext")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .clang_args(["-x", "c++"].iter())
         .generate()
