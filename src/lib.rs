@@ -1,7 +1,9 @@
+#[allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 mod ffi_recast {
   include!(concat!(env!("OUT_DIR"), "/recast.rs"));
 }
 
+#[allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 mod ffi_detour {
   include!(concat!(env!("OUT_DIR"), "/detour_Status.rs"));
   include!(concat!(env!("OUT_DIR"), "/detour_NavMesh.rs"));
@@ -15,6 +17,7 @@ mod ffi_inline {
   include!(concat!(env!("OUT_DIR"), "/inline.rs"));
 }
 
+pub use ffi_detour::*;
 pub use ffi_inline::*;
 pub use ffi_recast::*;
 
