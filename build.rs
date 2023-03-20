@@ -105,17 +105,46 @@ fn build_recast() -> PathBuf {
 }
 
 fn generate_recast_bindings() {
-  let bind_files = [("recastnavigation/Recast/Include/Recast.h", "recast.rs")];
+  let bind_files: &[(&str, &str, &[&str])] = &[
+    ("recastnavigation/Recast/Include/Recast.h", "recast.rs", &[]),
+    (
+      "recastnavigation/Detour/Include/DetourStatus.h",
+      "detour_Status.rs",
+      &[".*DetourAlloc\\.h"],
+    ),
+    (
+      "recastnavigation/Detour/Include/DetourNavMesh.h",
+      "detour_NavMesh.rs",
+      &[".*DetourAlloc\\.h", ".*DetourStatus\\.h"],
+    ),
+    (
+      "recastnavigation/Detour/Include/DetourNavMeshBuilder.h",
+      "detour_NavMeshBuilder.rs",
+      &[".*DetourAlloc\\.h"],
+    ),
+    (
+      "recastnavigation/Detour/Include/DetourNavMeshQuery.h",
+      "detour_NavMeshQuery.rs",
+      &[".*DetourNavMesh\\.h", ".*DetourStatus\\.h"],
+    ),
+  ];
 
   let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
 
-  for (bind_src, bind_dst) in bind_files {
-    let bindings = bindgen::Builder::default()
+  for &(bind_src, bind_dst, block_files) in bind_files {
+    let mut bindings_builder = bindgen::Builder::default()
       .header(bind_src)
       .parse_callbacks(Box::new(bindgen::CargoCallbacks))
       .clang_args(["-x", "c++"].iter())
-      .generate()
-      .expect("Unable to generate bindings.");
+      .blocklist_file(".*stddef\\.h")
+      .blocklist_type("max_align_t");
+
+    for blocked_file in block_files {
+      bindings_builder = bindings_builder.blocklist_file(blocked_file);
+    }
+
+    let bindings =
+      bindings_builder.generate().expect("Unable to generate bindings.");
 
     bindings
       .write_to_file(out_path.join(bind_dst))

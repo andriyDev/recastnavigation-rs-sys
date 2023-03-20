@@ -2,6 +2,13 @@ mod ffi_recast {
   include!(concat!(env!("OUT_DIR"), "/recast.rs"));
 }
 
+mod ffi_detour {
+  include!(concat!(env!("OUT_DIR"), "/detour_Status.rs"));
+  include!(concat!(env!("OUT_DIR"), "/detour_NavMesh.rs"));
+  include!(concat!(env!("OUT_DIR"), "/detour_NavMeshBuilder.rs"));
+  include!(concat!(env!("OUT_DIR"), "/detour_NavMeshQuery.rs"));
+}
+
 mod ffi_inline {
   use crate::ffi_recast::rcContext;
 
