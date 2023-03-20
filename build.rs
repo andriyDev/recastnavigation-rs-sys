@@ -107,6 +107,7 @@ fn build_recast() -> PathBuf {
 fn generate_recast_bindings() {
   let bind_files: &[(&str, &str, &[&str])] = &[
     ("recastnavigation/Recast/Include/Recast.h", "recast.rs", &[]),
+    ("recastnavigation/Detour/Include/DetourAlloc.h", "detour_Alloc.rs", &[]),
     (
       "recastnavigation/Detour/Include/DetourStatus.h",
       "detour_Status.rs",
@@ -125,7 +126,7 @@ fn generate_recast_bindings() {
     (
       "recastnavigation/Detour/Include/DetourNavMeshQuery.h",
       "detour_NavMeshQuery.rs",
-      &[".*DetourNavMesh\\.h", ".*DetourStatus\\.h"],
+      &[".*DetourAlloc\\.h", ".*DetourNavMesh\\.h", ".*DetourStatus\\.h"],
     ),
   ];
 

@@ -5,6 +5,7 @@ mod ffi_recast {
 
 #[allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 mod ffi_detour {
+  include!(concat!(env!("OUT_DIR"), "/detour_Alloc.rs"));
   include!(concat!(env!("OUT_DIR"), "/detour_Status.rs"));
   include!(concat!(env!("OUT_DIR"), "/detour_NavMesh.rs"));
   include!(concat!(env!("OUT_DIR"), "/detour_NavMeshBuilder.rs"));
