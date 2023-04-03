@@ -4,8 +4,17 @@ use cmake::Config;
 
 fn main() {
   println!("cargo:rerun-if-env-changed=PROFILE");
+  println!("cargo:rerun-if-env-changed=RECAST_NO_VENDOR");
+  println!("cargo:rerun-if-env-changed=RECAST_VENDOR");
 
-  let lib_destination = find_recast().unwrap_or_else(|| build_recast());
+  let lib_destination;
+  if env::var("RECAST_NO_VENDOR").unwrap_or("false".into()) == "true" {
+    lib_destination = find_recast().unwrap();
+  } else if env::var("RECAST_VENDOR").unwrap_or("false".into()) == "true" {
+    lib_destination = build_recast();
+  } else {
+    lib_destination = find_recast().unwrap_or_else(|| build_recast());
+  }
 
   println!("cargo:rustc-link-search=native={}", lib_destination.display());
 
