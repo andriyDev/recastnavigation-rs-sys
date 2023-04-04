@@ -32,7 +32,9 @@ pub use ffi_recast::*;
 
 #[cfg(test)]
 mod tests {
-  use crate::{ffi_detour::*, ffi_inline::*, ffi_recast::*};
+  use crate::{
+    ffi_detour::*, ffi_detour_crowd::*, ffi_inline::*, ffi_recast::*,
+  };
 
   #[test]
   fn recast_create_simple_nav_mesh() {
@@ -240,7 +242,7 @@ mod tests {
     fn find_poly_ref(query: &dtNavMeshQuery, pos: &[f32; 3]) -> dtPolyRef {
       let extents = [0.1, 100.0, 0.1];
 
-      let mut path: dtPolyRef = 0;
+      let mut poly_ref: dtPolyRef = 0;
 
       let query_filter = dtQueryFilter {
         m_areaCost: [1.0; 64],
@@ -254,14 +256,14 @@ mod tests {
             pos.as_ptr(),
             extents.as_ptr(),
             &query_filter,
-            &mut path,
+            &mut poly_ref,
             std::ptr::null_mut(),
           )
         },
         DT_SUCCESS
       );
 
-      path
+      poly_ref
     }
 
     let start_point = [1.1, 0.0, 0.1];
@@ -301,6 +303,163 @@ mod tests {
     assert_eq!(path, [8, 9, 10, 12, 13, 0, 0, 0, 0, 0]);
 
     unsafe { dtFreeNavMeshQuery(nav_mesh_query) };
+    unsafe { dtFreeNavMesh(nav_mesh) };
+  }
+
+  #[test]
+  fn detour_crowd_basic_path_following() {
+    let verts = vec![
+      1, 0, 1, //
+      1, 0, 0, //
+      2, 0, 0, //
+      2, 0, 1, //
+      3, 0, 1, //
+      3, 0, 2, //
+      2, 0, 2, //
+      1, 0, 2, //
+      0, 0, 2, //
+      0, 0, 1, //
+    ];
+
+    const N: u16 = RC_MESH_NULL_IDX;
+
+    let polys = vec![
+      0, 1, 2, N, N, 1, //
+      2, 3, 0, N, 2, 0, //
+      0, 3, 6, 1, 4, 3, //
+      0, 6, 7, 2, N, 6, //
+      6, 3, 4, 2, N, 5, //
+      6, 4, 5, 4, N, N, //
+      0, 7, 8, 3, N, 7, //
+      0, 8, 9, 6, N, N, //
+    ];
+
+    let poly_flags = vec![1, 1, 1, 1, 1, 1, 1, 1];
+    let poly_areas = vec![0, 0, 0, 0, 0, 0, 0, 0];
+
+    let mut nav_mesh_create_data = dtNavMeshCreateParams {
+      verts: verts.as_ptr(),
+      vertCount: verts.len() as i32,
+      polys: polys.as_ptr(),
+      polyFlags: poly_flags.as_ptr(),
+      polyAreas: poly_areas.as_ptr(),
+      polyCount: polys.len() as i32 / 6,
+      nvp: 3,
+      detailMeshes: std::ptr::null(),
+      detailVerts: std::ptr::null(),
+      detailVertsCount: 0,
+      detailTris: std::ptr::null(),
+      detailTriCount: 0,
+      offMeshConVerts: std::ptr::null(),
+      offMeshConRad: std::ptr::null(),
+      offMeshConFlags: std::ptr::null(),
+      offMeshConAreas: std::ptr::null(),
+      offMeshConDir: std::ptr::null(),
+      offMeshConUserID: std::ptr::null(),
+      offMeshConCount: 0,
+      userId: 0,
+      tileX: 0,
+      tileY: 0,
+      tileLayer: 0,
+      bmin: [0.0, 0.0, 0.0],
+      bmax: [3.0, 2.0, 2.0],
+      walkableHeight: 1.0,
+      walkableRadius: 1.0,
+      walkableClimb: 1.0,
+      cs: 1.0,
+      ch: 1.0,
+      buildBvTree: false,
+    };
+
+    let mut data: *mut u8 = std::ptr::null_mut();
+    let mut data_size: i32 = 0;
+
+    assert!(unsafe {
+      dtCreateNavMeshData(&mut nav_mesh_create_data, &mut data, &mut data_size)
+    });
+
+    let nav_mesh = unsafe { &mut *dtAllocNavMesh() };
+    assert_ne!(nav_mesh as *mut dtNavMesh, std::ptr::null_mut());
+    assert_eq!(
+      unsafe { nav_mesh.init1(data, data_size, dtTileFlags_DT_TILE_FREE_DATA) },
+      DT_SUCCESS
+    );
+
+    let crowd = unsafe { &mut *dtAllocCrowd() };
+    assert!(unsafe { crowd.init(10, 10.0, nav_mesh) });
+
+    let agent_position = [1.1, 0.0, 0.1];
+    let agent_params = dtCrowdAgentParams {
+      radius: 0.25,
+      height: 1.0,
+      maxAcceleration: 0.5,
+      maxSpeed: 1.0,
+      collisionQueryRange: 1.0,
+      pathOptimizationRange: 10.0,
+      separationWeight: 1.0,
+      updateFlags: 0,
+      obstacleAvoidanceType: 0,
+      queryFilterType: 0,
+      userData: std::ptr::null_mut(),
+    };
+
+    assert_eq!(
+      unsafe { crowd.addAgent(agent_position.as_ptr(), &agent_params) },
+      0
+    );
+
+    unsafe { crowd.update(0.1, std::ptr::null_mut()) };
+
+    let updated_position = unsafe { &(*crowd.getAgent(0)).npos };
+    assert_eq!(updated_position, &agent_position);
+
+    let target_point = [2.9, 0.0, 1.9];
+    let extents = [0.1, 100.0, 0.1];
+
+    let mut target_poly_ref: dtPolyRef = 0;
+
+    let query_filter = dtQueryFilter {
+      m_areaCost: [1.0; 64],
+      m_includeFlags: 0xffff,
+      m_excludeFlags: 0,
+    };
+
+    assert_eq!(
+      unsafe {
+        (*crowd.m_navquery).findNearestPoly(
+          target_point.as_ptr(),
+          extents.as_ptr(),
+          &query_filter,
+          &mut target_poly_ref,
+          std::ptr::null_mut(),
+        )
+      },
+      DT_SUCCESS
+    );
+
+    assert!(unsafe {
+      crowd.requestMoveTarget(0, target_poly_ref, target_point.as_ptr())
+    });
+
+    for _ in 0..200 {
+      unsafe { crowd.update(0.1, std::ptr::null_mut()) };
+    }
+
+    let updated_position = unsafe { &(*crowd.getAgent(0)).npos };
+    let delta = [
+      updated_position[0] - target_point[0],
+      updated_position[1] - target_point[1],
+      updated_position[2] - target_point[2],
+    ];
+    assert!(
+      (delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]).sqrt()
+        < 0.01,
+      "\n\nleft: {:?}\nright: {:?}",
+      updated_position,
+      target_point
+    );
+
+    unsafe { dtFreeCrowd(crowd) };
     unsafe { dtFreeNavMesh(nav_mesh) };
   }
 }
