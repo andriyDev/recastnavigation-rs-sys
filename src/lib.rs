@@ -12,6 +12,13 @@ mod ffi_detour {
   include!(concat!(env!("OUT_DIR"), "/detour_NavMeshQuery.rs"));
 }
 
+#[allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
+mod ffi_detour_crowd {
+  use crate::ffi_detour::*;
+
+  include!(concat!(env!("OUT_DIR"), "/detour_crowd.rs"));
+}
+
 mod ffi_inline {
   use crate::ffi_recast::rcContext;
 
@@ -19,6 +26,7 @@ mod ffi_inline {
 }
 
 pub use ffi_detour::*;
+pub use ffi_detour_crowd::*;
 pub use ffi_inline::*;
 pub use ffi_recast::*;
 

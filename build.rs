@@ -137,6 +137,16 @@ fn generate_recast_bindings() {
       "detour_NavMeshQuery.rs",
       &[".*DetourAlloc\\.h", ".*DetourNavMesh\\.h", ".*DetourStatus\\.h"],
     ),
+    (
+      "recastnavigation/DetourCrowd/Include/DetourCrowd.h",
+      "detour_crowd.rs",
+      &[
+        ".*DetourNavMeshQuery\\.h",
+        ".*DetourNavMesh\\.h",
+        ".*DetourAlloc\\.h",
+        ".*DetourStatus\\.h",
+      ],
+    ),
   ];
 
   let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
@@ -145,7 +155,7 @@ fn generate_recast_bindings() {
     let mut bindings_builder = bindgen::Builder::default()
       .header(bind_src)
       .parse_callbacks(Box::new(bindgen::CargoCallbacks))
-      .clang_args(["-x", "c++"].iter())
+      .clang_args(["-x", "c++", "-Irecastnavigation/Detour/Include"].iter())
       .blocklist_file(".*stddef\\.h")
       .blocklist_type("max_align_t");
 
