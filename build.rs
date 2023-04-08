@@ -114,62 +114,53 @@ fn build_recast() -> PathBuf {
 }
 
 fn generate_recast_bindings() {
-  let bind_files: &[(&str, &str, &[&str])] = &[
-    ("recastnavigation/Recast/Include/Recast.h", "recast.rs", &[]),
-    ("recastnavigation/Detour/Include/DetourAlloc.h", "detour_Alloc.rs", &[]),
-    (
-      "recastnavigation/Detour/Include/DetourStatus.h",
-      "detour_Status.rs",
-      &[".*DetourAlloc\\.h"],
-    ),
-    (
-      "recastnavigation/Detour/Include/DetourNavMesh.h",
-      "detour_NavMesh.rs",
-      &[".*DetourAlloc\\.h", ".*DetourStatus\\.h"],
-    ),
-    (
-      "recastnavigation/Detour/Include/DetourNavMeshBuilder.h",
-      "detour_NavMeshBuilder.rs",
-      &[".*DetourAlloc\\.h"],
-    ),
-    (
-      "recastnavigation/Detour/Include/DetourNavMeshQuery.h",
-      "detour_NavMeshQuery.rs",
-      &[".*DetourAlloc\\.h", ".*DetourNavMesh\\.h", ".*DetourStatus\\.h"],
-    ),
-    (
-      "recastnavigation/DetourCrowd/Include/DetourCrowd.h",
-      "detour_crowd.rs",
-      &[
-        ".*DetourNavMeshQuery\\.h",
-        ".*DetourNavMesh\\.h",
-        ".*DetourAlloc\\.h",
-        ".*DetourStatus\\.h",
-      ],
-    ),
-  ];
-
-  let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-
-  for &(bind_src, bind_dst, block_files) in bind_files {
-    let mut bindings_builder = bindgen::Builder::default()
-      .header(bind_src)
+  fn create_bindings(
+    add_to_builder: impl Fn(bindgen::Builder) -> bindgen::Builder,
+    out_file: PathBuf,
+  ) {
+    let builder = bindgen::Builder::default()
       .parse_callbacks(Box::new(bindgen::CargoCallbacks))
-      .clang_args(["-x", "c++", "-Irecastnavigation/Detour/Include"].iter())
+      .clang_args(["-x", "c++"].iter())
       .blocklist_file(".*stddef\\.h")
       .blocklist_type("max_align_t");
 
-    for blocked_file in block_files {
-      bindings_builder = bindings_builder.blocklist_file(blocked_file);
-    }
-
     let bindings =
-      bindings_builder.generate().expect("Unable to generate bindings.");
+      add_to_builder(builder).generate().expect("Unable to generate bindings.");
 
-    bindings
-      .write_to_file(out_path.join(bind_dst))
-      .expect("Couldn't write bindings!");
+    bindings.write_to_file(out_file).expect("Couldn't write bindings!");
   }
+
+  let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+
+  create_bindings(
+    |builder| builder.header("recastnavigation/Recast/Include/Recast.h"),
+    out_path.join("recast.rs"),
+  );
+
+  create_bindings(
+    |builder| {
+      builder
+        .header("recastnavigation/Detour/Include/DetourAlloc.h")
+        .header("recastnavigation/Detour/Include/DetourStatus.h")
+        .header("recastnavigation/Detour/Include/DetourNavMesh.h")
+        .header("recastnavigation/Detour/Include/DetourNavMeshBuilder.h")
+        .header("recastnavigation/Detour/Include/DetourNavMeshQuery.h")
+    },
+    out_path.join("detour.rs"),
+  );
+
+  create_bindings(
+    |builder| {
+      builder
+        .header("recastnavigation/DetourCrowd/Include/DetourCrowd.h")
+        .blocklist_file(".*DetourAlloc\\.h")
+        .blocklist_file(".*DetourNavMesh\\.h")
+        .blocklist_file(".*DetourNavMeshQuery\\.h")
+        .blocklist_file(".*DetourStatus\\.h")
+        .clang_args(["-Irecastnavigation/Detour/Include"].iter())
+    },
+    out_path.join("detour_crowd.rs"),
+  );
 }
 
 fn build_and_link_inline_lib() {
