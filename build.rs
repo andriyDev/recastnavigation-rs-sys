@@ -161,6 +161,20 @@ fn generate_recast_bindings() {
     },
     out_path.join("detour_crowd.rs"),
   );
+
+  create_bindings(
+    |builder| {
+      builder
+        .header("recastnavigation/DetourTileCache/Include/DetourTileCache.h")
+        .header(
+          "recastnavigation/DetourTileCache/Include/DetourTileCacheBuilder.h",
+        )
+        .blocklist_file(".*DetourAlloc\\.h")
+        .blocklist_file(".*DetourStatus\\.h")
+        .clang_args(["-Irecastnavigation/Detour/Include"].iter())
+    },
+    out_path.join("detour_tile_cache.rs"),
+  )
 }
 
 fn build_and_link_inline_lib() {
@@ -169,6 +183,9 @@ fn build_and_link_inline_lib() {
   cc::Build::new()
     .file("inline_lib_src/inline.cc")
     .include("recastnavigation/Recast/Include")
+    .include("recastnavigation/Detour/Include")
+    .include("recastnavigation/DetourCrowd/Include")
+    .include("recastnavigation/DetourTileCache/Include")
     .compile("recast_inline");
 
   println!("cargo:rustc-link-search=native={}", env::var("OUT_DIR").unwrap());
@@ -178,9 +195,20 @@ fn build_and_link_inline_lib() {
 fn generate_inline_bindings() {
   let bindings = bindgen::Builder::default()
     .header("inline_lib_src/inline.h")
-    .blocklist_type("rcContext")
     .parse_callbacks(Box::new(bindgen::CargoCallbacks))
-    .clang_args(["-x", "c++"].iter())
+    .clang_args(
+      [
+        "-x",
+        "c++",
+        "-Irecastnavigation/Recast/Include",
+        "-Irecastnavigation/Detour/Include",
+        "-Irecastnavigation/DetourCrowd/Include",
+        "-Irecastnavigation/DetourTileCache/Include",
+      ]
+      .iter(),
+    )
+    .allowlist_recursively(false)
+    .allowlist_file("inline_lib_src/inline.h")
     .generate()
     .expect("Unable to generate bindings.");
 

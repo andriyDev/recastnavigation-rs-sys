@@ -15,14 +15,25 @@ mod ffi_detour_crowd {
   include!(concat!(env!("OUT_DIR"), "/detour_crowd.rs"));
 }
 
+#[allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
+mod ffi_detour_tile_cache {
+  use crate::ffi_detour::*;
+
+  include!(concat!(env!("OUT_DIR"), "/detour_tile_cache.rs"));
+}
+
+#[allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 mod ffi_inline {
-  use crate::ffi_recast::rcContext;
+  use crate::ffi_detour::*;
+  use crate::ffi_detour_tile_cache::*;
+  use crate::ffi_recast::*;
 
   include!(concat!(env!("OUT_DIR"), "/inline.rs"));
 }
 
 pub use ffi_detour::*;
 pub use ffi_detour_crowd::*;
+pub use ffi_detour_tile_cache::*;
 pub use ffi_inline::*;
 pub use ffi_recast::*;
 
