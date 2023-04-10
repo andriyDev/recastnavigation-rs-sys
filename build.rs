@@ -171,6 +171,8 @@ fn generate_recast_bindings() {
         )
         .blocklist_file(".*DetourAlloc\\.h")
         .blocklist_file(".*DetourStatus\\.h")
+        .blocklist_type("dtNavMesh")
+        .blocklist_type("dtNavMeshCreateParams")
         .clang_args(["-Irecastnavigation/Detour/Include"].iter())
     },
     out_path.join("detour_tile_cache.rs"),

@@ -40,7 +40,8 @@ pub use ffi_recast::*;
 #[cfg(test)]
 mod tests {
   use crate::{
-    ffi_detour::*, ffi_detour_crowd::*, ffi_inline::*, ffi_recast::*,
+    ffi_detour::*, ffi_detour_crowd::*, ffi_detour_tile_cache::*,
+    ffi_inline::*, ffi_recast::*,
   };
 
   #[test]
@@ -468,5 +469,335 @@ mod tests {
 
     unsafe { dtFreeCrowd(crowd) };
     unsafe { dtFreeNavMesh(nav_mesh) };
+  }
+
+  #[test]
+  fn detour_tile_cache_simple_caching() {
+    let cache_params = dtTileCacheParams {
+      orig: [0.0, 0.0, 0.0],
+      cs: 1.0,
+      ch: 1.0,
+      width: 5,
+      height: 5,
+      walkableHeight: 1.0,
+      walkableRadius: 1.0,
+      walkableClimb: 1.0,
+      maxSimplificationError: 0.01,
+      maxTiles: 1000,
+      maxObstacles: 10,
+    };
+
+    let alloc = unsafe { CreateDefaultTileCacheAlloc() };
+
+    extern "C" fn max_compressed_size(
+      _object_ptr: *mut std::ffi::c_void,
+      buffer_size: i32,
+    ) -> i32 {
+      buffer_size
+    }
+
+    extern "C" fn compress(
+      _object_ptr: *mut std::ffi::c_void,
+      buffer: *const u8,
+      buffer_size: i32,
+      compressed: *mut u8,
+      max_compressed_size: i32,
+      compressed_size: *mut i32,
+    ) -> u32 {
+      assert!(
+        buffer_size <= max_compressed_size,
+        "\n\nleft: {}\nright: {}",
+        buffer_size,
+        max_compressed_size
+      );
+
+      let buffer_slice =
+        unsafe { std::slice::from_raw_parts(buffer, buffer_size as usize) };
+
+      unsafe { *compressed_size = buffer_size };
+
+      let compressed_slice = unsafe {
+        std::slice::from_raw_parts_mut(compressed, *compressed_size as usize)
+      };
+
+      compressed_slice.copy_from_slice(buffer_slice);
+
+      DT_SUCCESS
+    }
+
+    extern "C" fn decompress(
+      object_ptr: *mut std::ffi::c_void,
+      compressed: *const u8,
+      compressed_size: i32,
+      buffer: *mut u8,
+      max_buffer_size: i32,
+      buffer_size: *mut i32,
+    ) -> u32 {
+      // Since compress just copies the source to destination, decompress is
+      // the exact same.
+      compress(
+        object_ptr,
+        compressed,
+        compressed_size,
+        buffer,
+        max_buffer_size,
+        buffer_size,
+      )
+    }
+    let forwarded_compressor = unsafe {
+      CreateForwardedTileCacheCompressor(
+        std::ptr::null_mut(),
+        Some(max_compressed_size),
+        Some(compress),
+        Some(decompress),
+      )
+    };
+
+    extern "C" fn set_poly_flags(
+      _: *mut std::ffi::c_void,
+      params: *mut dtNavMeshCreateParams,
+      _areas: *mut u8,
+      flags: *mut u16,
+    ) {
+      let params = unsafe { &*params };
+      let flags = unsafe {
+        std::slice::from_raw_parts_mut(flags, params.polyCount as usize)
+      };
+
+      flags.fill(1);
+    }
+    let forwarded_mesh_process = unsafe {
+      CreateForwardedTileCacheMeshProcess(
+        std::ptr::null_mut(),
+        Some(set_poly_flags),
+      )
+    };
+
+    let tile_cache = unsafe { &mut *dtAllocTileCache() };
+    unsafe {
+      tile_cache.init(
+        &cache_params,
+        alloc,
+        forwarded_compressor,
+        forwarded_mesh_process,
+      )
+    };
+
+    let nav_mesh = unsafe { &mut *dtAllocNavMesh() };
+    let nav_mesh_params = dtNavMeshParams {
+      orig: [0.0, 0.0, 0.0],
+      tileWidth: 5.0,
+      tileHeight: 5.0,
+      maxTiles: 1000,
+      maxPolys: 10,
+    };
+    unsafe { nav_mesh.init(&nav_mesh_params) };
+
+    for _ in 0..10 {
+      let mut up_to_date = false;
+      unsafe { tile_cache.update(1.0, nav_mesh, &mut up_to_date) };
+      assert!(up_to_date);
+    }
+
+    // Create nav mesh data to put into the tile cache.
+
+    let context = unsafe { CreateContext(false) };
+
+    let height_field = unsafe { &mut *rcAllocHeightfield() };
+    assert!(unsafe {
+      rcCreateHeightfield(
+        context,
+        height_field,
+        5,
+        5,
+        [0.0, 0.0, 0.0].as_ptr(),
+        [5.0, 5.0, 5.0].as_ptr(),
+        1.0,
+        1.0,
+      )
+    });
+
+    let verts = [
+      2.0, 0.5, 0.0, //
+      3.0, 0.5, 0.0, //
+      3.0, 0.5, 4.0, //
+      5.0, 0.5, 4.0, //
+      5.0, 0.5, 5.0, //
+      0.0, 0.5, 5.0, //
+      0.0, 0.5, 4.0, //
+      2.0, 0.5, 4.0, //
+    ];
+    let triangles = [0, 1, 2, 2, 7, 0, 2, 3, 4, 2, 4, 5, 2, 5, 7, 5, 6, 7];
+    let area_ids = [
+      RC_WALKABLE_AREA,
+      RC_WALKABLE_AREA,
+      RC_WALKABLE_AREA,
+      RC_WALKABLE_AREA,
+      RC_WALKABLE_AREA,
+      RC_WALKABLE_AREA,
+    ];
+
+    assert!(
+      unsafe {
+        rcRasterizeTriangles(
+          context,
+          verts.as_ptr(),
+          verts.len() as i32 / 3,
+          triangles.as_ptr(),
+          area_ids.as_ptr(),
+          triangles.len() as i32 / 3,
+          height_field,
+          1,
+        )
+      },
+      "Expected rasterization to succeed."
+    );
+
+    let compact_height_field = unsafe { &mut *rcAllocCompactHeightfield() };
+    assert!(unsafe {
+      rcBuildCompactHeightfield(
+        context,
+        3,
+        1,
+        height_field,
+        compact_height_field,
+      )
+    });
+
+    unsafe { rcFreeHeightField(height_field) };
+
+    let layer_set = unsafe { &mut *rcAllocHeightfieldLayerSet() };
+    assert!(unsafe {
+      rcBuildHeightfieldLayers(context, compact_height_field, 0, 3, layer_set)
+    });
+
+    let layer = &unsafe {
+      std::slice::from_raw_parts(layer_set.layers, layer_set.nlayers as usize)
+    }[0];
+
+    let mut header = dtTileCacheLayerHeader {
+      magic: DT_TILECACHE_MAGIC,
+      version: DT_TILECACHE_VERSION,
+      tx: 0,
+      ty: 0,
+      tlayer: 0,
+      bmin: layer.bmin,
+      bmax: layer.bmax,
+      width: layer.width as u8,
+      height: layer.height as u8,
+      minx: layer.minx as u8,
+      maxx: layer.maxx as u8,
+      miny: layer.miny as u8,
+      maxy: layer.maxy as u8,
+      hmin: layer.hmin as u16,
+      hmax: layer.hmax as u16,
+    };
+
+    let mut data: *mut u8 = std::ptr::null_mut();
+    let mut data_size: i32 = 0;
+
+    assert_eq!(
+      unsafe {
+        dtBuildTileCacheLayer(
+          forwarded_compressor,
+          &mut header,
+          layer.heights,
+          layer.areas,
+          layer.cons,
+          &mut data,
+          &mut data_size,
+        )
+      },
+      DT_SUCCESS
+    );
+
+    assert_eq!(
+      unsafe {
+        tile_cache.addTile(
+          data,
+          data_size,
+          dtTileFlags_DT_TILE_FREE_DATA as u8,
+          std::ptr::null_mut(),
+        )
+      },
+      DT_SUCCESS
+    );
+
+    assert_eq!(
+      unsafe { tile_cache.buildNavMeshTilesAt(0, 0, nav_mesh) },
+      DT_SUCCESS
+    );
+
+    let query = unsafe { &mut *dtAllocNavMeshQuery() };
+    assert_eq!(unsafe { query.init(nav_mesh, 10) }, DT_SUCCESS);
+
+    let query_filter = dtQueryFilter {
+      m_areaCost: [1.0; 64],
+      m_includeFlags: 0xffff,
+      m_excludeFlags: 0,
+    };
+
+    let mut path = [0; 10];
+    let mut path_count = 0;
+
+    let start_point = [2.1, 1.0, 0.1];
+    let end_point = [4.9, 1.0, 4.9];
+
+    let mut start_point_ref = 0;
+    assert_eq!(
+      unsafe {
+        query.findNearestPoly(
+          start_point.as_ptr(),
+          [0.1, 100.0, 0.1].as_ptr(),
+          &query_filter,
+          &mut start_point_ref,
+          std::ptr::null_mut(),
+        )
+      },
+      DT_SUCCESS
+    );
+    assert_ne!(start_point_ref, 0);
+
+    let mut end_point_ref = 0;
+    assert_eq!(
+      unsafe {
+        query.findNearestPoly(
+          end_point.as_ptr(),
+          [0.1, 100.0, 0.1].as_ptr(),
+          &query_filter,
+          &mut end_point_ref,
+          std::ptr::null_mut(),
+        )
+      },
+      DT_SUCCESS
+    );
+    assert_ne!(end_point_ref, 0);
+
+    assert_eq!(
+      unsafe {
+        query.findPath(
+          start_point_ref,
+          end_point_ref,
+          start_point.as_ptr(),
+          end_point.as_ptr(),
+          &query_filter,
+          path.as_mut_ptr(),
+          &mut path_count,
+          path.len() as i32,
+        )
+      },
+      DT_SUCCESS
+    );
+
+    assert_eq!(path, [16385, 16387, 16384, 0, 0, 0, 0, 0, 0, 0]);
+
+    unsafe { dtFreeNavMeshQuery(query) };
+    unsafe { rcFreeHeightfieldLayerSet(layer_set) };
+    unsafe { rcFreeCompactHeightfield(compact_height_field) };
+    unsafe { dtFreeNavMesh(nav_mesh) };
+    unsafe { dtFreeTileCache(tile_cache) };
+    unsafe { DeleteTileCacheMeshProcess(forwarded_mesh_process) };
+    unsafe { DeleteTileCacheCompressor(forwarded_compressor) };
+    unsafe { DeleteTileCacheAlloc(alloc) };
   }
 }
