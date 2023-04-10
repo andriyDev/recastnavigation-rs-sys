@@ -1,13 +1,16 @@
+#[cfg(feature = "recast")]
 #[allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 mod ffi_recast {
   include!(concat!(env!("OUT_DIR"), "/recast.rs"));
 }
 
+#[cfg(feature = "detour")]
 #[allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 mod ffi_detour {
   include!(concat!(env!("OUT_DIR"), "/detour.rs"));
 }
 
+#[cfg(feature = "detour_crowd")]
 #[allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 mod ffi_detour_crowd {
   use crate::ffi_detour::*;
@@ -15,6 +18,7 @@ mod ffi_detour_crowd {
   include!(concat!(env!("OUT_DIR"), "/detour_crowd.rs"));
 }
 
+#[cfg(feature = "detour_tile_cache")]
 #[allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 mod ffi_detour_tile_cache {
   use crate::ffi_detour::*;
@@ -22,28 +26,35 @@ mod ffi_detour_tile_cache {
   include!(concat!(env!("OUT_DIR"), "/detour_tile_cache.rs"));
 }
 
+#[cfg(any(feature = "recast", feature = "detour_tile_cache"))]
 #[allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 mod ffi_inline {
+  #[cfg(feature = "detour")]
   use crate::ffi_detour::*;
+  #[cfg(feature = "detour_tile_cache")]
   use crate::ffi_detour_tile_cache::*;
+  #[cfg(feature = "recast")]
   use crate::ffi_recast::*;
 
   include!(concat!(env!("OUT_DIR"), "/inline.rs"));
 }
 
+#[cfg(feature = "detour")]
 pub use ffi_detour::*;
+#[cfg(feature = "detour_crowd")]
 pub use ffi_detour_crowd::*;
+#[cfg(feature = "detour_tile_cache")]
 pub use ffi_detour_tile_cache::*;
+#[cfg(any(feature = "recast", feature = "detour_tile_cache"))]
 pub use ffi_inline::*;
+#[cfg(feature = "recast")]
 pub use ffi_recast::*;
 
 #[cfg(test)]
 mod tests {
-  use crate::{
-    ffi_detour::*, ffi_detour_crowd::*, ffi_detour_tile_cache::*,
-    ffi_inline::*, ffi_recast::*,
-  };
+  use crate::*;
 
+  #[cfg(feature = "recast")]
   #[test]
   fn recast_create_simple_nav_mesh() {
     let context = unsafe { CreateContext(false) };
@@ -164,6 +175,7 @@ mod tests {
     unsafe { rcFreePolyMesh(mesh) };
   }
 
+  #[cfg(feature = "detour")]
   #[test]
   fn detour_finds_simple_path() {
     let verts = vec![
@@ -179,7 +191,7 @@ mod tests {
       0, 0, 1, //
     ];
 
-    const N: u16 = RC_MESH_NULL_IDX;
+    const N: u16 = 0xffff;
 
     let polys = vec![
       0, 1, 2, N, N, 1, //
@@ -314,6 +326,7 @@ mod tests {
     unsafe { dtFreeNavMesh(nav_mesh) };
   }
 
+  #[cfg(feature = "detour_crowd")]
   #[test]
   fn detour_crowd_basic_path_following() {
     let verts = vec![
@@ -329,7 +342,7 @@ mod tests {
       0, 0, 1, //
     ];
 
-    const N: u16 = RC_MESH_NULL_IDX;
+    const N: u16 = 0xffff;
 
     let polys = vec![
       0, 1, 2, N, N, 1, //
@@ -471,6 +484,7 @@ mod tests {
     unsafe { dtFreeNavMesh(nav_mesh) };
   }
 
+  #[cfg(feature = "detour_tile_cache")]
   #[test]
   fn detour_tile_cache_simple_caching() {
     let cache_params = dtTileCacheParams {

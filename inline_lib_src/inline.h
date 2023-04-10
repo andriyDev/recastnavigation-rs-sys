@@ -1,6 +1,7 @@
 #pragma once
 
-// Recast definitions.
+// Recast declarations.
+#ifdef RECAST
 
 #include "Recast.h"
 
@@ -8,7 +9,10 @@ rcContext* CreateContext(bool state = true);
 
 void DeleteContext(rcContext* context);
 
-// DetourTileCache definitions.
+#endif
+
+// DetourTileCache declarations.
+#ifdef DETOUR_TILE_CACHE
 
 #include "DetourNavMeshBuilder.h"
 #include "DetourTileCache.h"
@@ -55,3 +59,5 @@ dtTileCacheCompressor* CreateForwardedTileCacheCompressor(
     ForwardVtableTileCacheCompressorDecompressFn decompress_fn);
 
 void DeleteTileCacheCompressor(dtTileCacheCompressor* compressor);
+
+#endif

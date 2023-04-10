@@ -3,7 +3,18 @@ edition = "2021"
 name = "recast_navigation_sys"
 version = "0.1.0"
 
+# recastnavigation bundles several libraries together into a single repo. This
+# would mean splitting this into several crates would require duplicating the
+# recastnavigation repo multiple times or horrible modification of CMake files.
+# Instead, Recast was made the "representative" and each library is enabled as a
+# feature flag.
 links = "Recast"
+
+[features]
+detour = []
+detour_crowd = ["detour"]
+detour_tile_cache = ["detour"]
+recast = []
 
 [build-dependencies]
 bindgen = "0.64.0"

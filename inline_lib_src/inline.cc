@@ -1,11 +1,17 @@
 
 #include "inline.h"
 
-#include "Recast.h"
+// Recast definitions.
+#ifdef RECAST
 
 rcContext* CreateContext(bool state) { return new rcContext(state); }
 
 void DeleteContext(rcContext* context) { delete context; }
+
+#endif
+
+// DetourTileCache definitions.
+#ifdef DETOUR_TILE_CACHE
 
 class ForwardVtableTileCacheMeshProcess : public dtTileCacheMeshProcess {
  public:
@@ -120,3 +126,5 @@ dtTileCacheCompressor* CreateForwardedTileCacheCompressor(
 void DeleteTileCacheCompressor(dtTileCacheCompressor* compressor) {
   delete compressor;
 }
+
+#endif

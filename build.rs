@@ -3,6 +3,14 @@ use std::{env, path::PathBuf};
 use cmake::Config;
 
 fn main() {
+  #[cfg(not(any(
+    feature = "recast",
+    feature = "detour",
+    feature = "detour_crowd",
+    feature = "detour_tile_cache"
+  )))]
+  compile_error!("At least one feature of 'recast', 'detour', 'detour_crowd', 'detour_tile_cache' should be enabled!");
+
   println!("cargo:rerun-if-env-changed=PROFILE");
   println!("cargo:rerun-if-env-changed=RECAST_NO_VENDOR");
   println!("cargo:rerun-if-env-changed=RECAST_VENDOR");
@@ -22,8 +30,12 @@ fn main() {
     println!("cargo:rustc-link-lib=static={}", lib);
   }
 
-  build_and_link_inline_lib();
-  generate_inline_bindings();
+  // Avoid building/linking the inlining lib if only detour/detour_crowd are
+  // used (since they have no "inline" definitions).
+  if cfg!(any(feature = "recast", feature = "detour_tile_cache")) {
+    build_and_link_inline_lib();
+    generate_inline_bindings();
+  }
 
   generate_recast_bindings();
 }
@@ -37,7 +49,15 @@ fn is_debug() -> bool {
 }
 
 fn lib_names() -> Vec<String> {
-  let root_names = vec!["Recast", "Detour", "DetourCrowd", "DetourTileCache"];
+  let mut root_names = Vec::new();
+  #[cfg(feature = "recast")]
+  root_names.push("Recast");
+  #[cfg(feature = "detour")]
+  root_names.push("Detour");
+  #[cfg(feature = "detour_crowd")]
+  root_names.push("DetourCrowd");
+  #[cfg(feature = "detour_tile_cache")]
+  root_names.push("DetourTileCache");
   if is_windows() && is_debug() {
     root_names.iter().map(|root| root.to_string() + "-d").collect()
   } else {
@@ -132,11 +152,13 @@ fn generate_recast_bindings() {
 
   let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
 
+  #[cfg(feature = "recast")]
   create_bindings(
     |builder| builder.header("recastnavigation/Recast/Include/Recast.h"),
     out_path.join("recast.rs"),
   );
 
+  #[cfg(feature = "detour")]
   create_bindings(
     |builder| {
       builder
@@ -149,6 +171,7 @@ fn generate_recast_bindings() {
     out_path.join("detour.rs"),
   );
 
+  #[cfg(feature = "detour_crowd")]
   create_bindings(
     |builder| {
       builder
@@ -162,6 +185,7 @@ fn generate_recast_bindings() {
     out_path.join("detour_crowd.rs"),
   );
 
+  #[cfg(feature = "detour_tile_cache")]
   create_bindings(
     |builder| {
       builder
@@ -176,26 +200,41 @@ fn generate_recast_bindings() {
         .clang_args(["-Irecastnavigation/Detour/Include"].iter())
     },
     out_path.join("detour_tile_cache.rs"),
-  )
+  );
 }
 
 fn build_and_link_inline_lib() {
   println!("cargo:rerun-if-changed=inline_lib_src");
 
-  cc::Build::new()
+  let mut build = cc::Build::new();
+  build
     .file("inline_lib_src/inline.cc")
     .include("recastnavigation/Recast/Include")
     .include("recastnavigation/Detour/Include")
     .include("recastnavigation/DetourCrowd/Include")
-    .include("recastnavigation/DetourTileCache/Include")
-    .compile("recast_inline");
+    .include("recastnavigation/DetourTileCache/Include");
+
+  if cfg!(feature = "recast") {
+    build.define("RECAST", None);
+  }
+  if cfg!(feature = "detour") {
+    build.define("DETOUR", None);
+  }
+  if cfg!(feature = "detour_crowd") {
+    build.define("DETOUR_CROWD", None);
+  }
+  if cfg!(feature = "detour_tile_cache") {
+    build.define("DETOUR_TILE_CACHE", None);
+  }
+
+  build.compile("recast_inline");
 
   println!("cargo:rustc-link-search=native={}", env::var("OUT_DIR").unwrap());
   println!("cargo:rustc-link-lib=static=recast_inline");
 }
 
 fn generate_inline_bindings() {
-  let bindings = bindgen::Builder::default()
+  let mut builder = bindgen::Builder::default()
     .header("inline_lib_src/inline.h")
     .parse_callbacks(Box::new(bindgen::CargoCallbacks))
     .clang_args(
@@ -210,9 +249,22 @@ fn generate_inline_bindings() {
       .iter(),
     )
     .allowlist_recursively(false)
-    .allowlist_file("inline_lib_src/inline.h")
-    .generate()
-    .expect("Unable to generate bindings.");
+    .allowlist_file("inline_lib_src/inline.h");
+
+  if cfg!(feature = "recast") {
+    builder = builder.clang_args(["-DRECAST"].iter());
+  }
+  if cfg!(feature = "detour") {
+    builder = builder.clang_args(["-DDETOUR"].iter());
+  }
+  if cfg!(feature = "detour_crowd") {
+    builder = builder.clang_args(["-DDETOUR_CROWD"].iter());
+  }
+  if cfg!(feature = "detour_tile_cache") {
+    builder = builder.clang_args(["-DDETOUR_TILE_CACHE"].iter());
+  }
+
+  let bindings = builder.generate().expect("Unable to generate bindings.");
 
   let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
   bindings
