@@ -599,99 +599,52 @@ mod tests {
       assert!(up_to_date);
     }
 
-    // Create nav mesh data to put into the tile cache.
-
-    let context = unsafe { CreateContext(false) };
-
-    let height_field = unsafe { &mut *rcAllocHeightfield() };
-    assert!(unsafe {
-      rcCreateHeightfield(
-        context,
-        height_field,
-        5,
-        5,
-        [0.0, 0.0, 0.0].as_ptr(),
-        [5.0, 5.0, 5.0].as_ptr(),
-        1.0,
-        1.0,
-      )
-    });
-
-    let verts = [
-      2.0, 0.5, 0.0, //
-      3.0, 0.5, 0.0, //
-      3.0, 0.5, 4.0, //
-      5.0, 0.5, 4.0, //
-      5.0, 0.5, 5.0, //
-      0.0, 0.5, 5.0, //
-      0.0, 0.5, 4.0, //
-      2.0, 0.5, 4.0, //
-    ];
-    let triangles = [0, 1, 2, 2, 7, 0, 2, 3, 4, 2, 4, 5, 2, 5, 7, 5, 6, 7];
-    let area_ids = [
-      RC_WALKABLE_AREA,
-      RC_WALKABLE_AREA,
-      RC_WALKABLE_AREA,
-      RC_WALKABLE_AREA,
-      RC_WALKABLE_AREA,
-      RC_WALKABLE_AREA,
-    ];
-
-    assert!(
-      unsafe {
-        rcRasterizeTriangles(
-          context,
-          verts.as_ptr(),
-          verts.len() as i32 / 3,
-          triangles.as_ptr(),
-          area_ids.as_ptr(),
-          triangles.len() as i32 / 3,
-          height_field,
-          1,
-        )
-      },
-      "Expected rasterization to succeed."
-    );
-
-    let compact_height_field = unsafe { &mut *rcAllocCompactHeightfield() };
-    assert!(unsafe {
-      rcBuildCompactHeightfield(
-        context,
-        3,
-        1,
-        height_field,
-        compact_height_field,
-      )
-    });
-
-    unsafe { rcFreeHeightField(height_field) };
-
-    let layer_set = unsafe { &mut *rcAllocHeightfieldLayerSet() };
-    assert!(unsafe {
-      rcBuildHeightfieldLayers(context, compact_height_field, 0, 3, layer_set)
-    });
-
-    let layer = &unsafe {
-      std::slice::from_raw_parts(layer_set.layers, layer_set.nlayers as usize)
-    }[0];
-
     let mut header = dtTileCacheLayerHeader {
       magic: DT_TILECACHE_MAGIC,
       version: DT_TILECACHE_VERSION,
       tx: 0,
       ty: 0,
       tlayer: 0,
-      bmin: layer.bmin,
-      bmax: layer.bmax,
-      width: layer.width as u8,
-      height: layer.height as u8,
-      minx: layer.minx as u8,
-      maxx: layer.maxx as u8,
-      miny: layer.miny as u8,
-      maxy: layer.maxy as u8,
-      hmin: layer.hmin as u16,
-      hmax: layer.hmax as u16,
+      bmin: [0.0, 1.0, 0.0],
+      bmax: [5.0, 1.0, 5.0],
+      width: 5 as u8,
+      height: 5 as u8,
+      minx: 0,
+      maxx: 4,
+      miny: 0,
+      maxy: 4,
+      hmin: 1,
+      hmax: 1,
     };
+
+    const N: u8 = 255;
+
+    let heights = [
+      N, N, 0, N, N, //
+      N, N, 0, N, N, //
+      N, N, 0, N, N, //
+      N, N, 0, N, N, //
+      0, 0, 0, 0, 0, //
+    ];
+
+    const W: u8 = DT_TILECACHE_WALKABLE_AREA;
+
+    let areas = [
+      0, 0, W, 0, 0, //
+      0, 0, W, 0, 0, //
+      0, 0, W, 0, 0, //
+      0, 0, W, 0, 0, //
+      W, W, W, W, W, //
+    ];
+
+    // Neighbour connectivity.
+    let cons = [
+      0, 0, 2, 0, 0, //
+      0, 0, 10, 0, 0, //
+      0, 0, 10, 0, 0, //
+      0, 0, 10, 0, 0, //
+      4, 5, 13, 5, 1, //
+    ];
 
     let mut data: *mut u8 = std::ptr::null_mut();
     let mut data_size: i32 = 0;
@@ -701,9 +654,9 @@ mod tests {
         dtBuildTileCacheLayer(
           forwarded_compressor,
           &mut header,
-          layer.heights,
-          layer.areas,
-          layer.cons,
+          heights.as_ptr(),
+          areas.as_ptr(),
+          cons.as_ptr(),
           &mut data,
           &mut data_size,
         )
@@ -792,8 +745,6 @@ mod tests {
     assert_eq!(path, [16385, 16387, 16384, 0, 0, 0, 0, 0, 0, 0]);
 
     unsafe { dtFreeNavMeshQuery(query) };
-    unsafe { rcFreeHeightfieldLayerSet(layer_set) };
-    unsafe { rcFreeCompactHeightfield(compact_height_field) };
     unsafe { dtFreeNavMesh(nav_mesh) };
     unsafe { dtFreeTileCache(tile_cache) };
     unsafe { DeleteTileCacheMeshProcess(forwarded_mesh_process) };
