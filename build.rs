@@ -16,12 +16,14 @@ fn main() {
   println!("cargo:rerun-if-env-changed=RECAST_VENDOR");
 
   let lib_destination;
+  let include_dirs;
   if env::var("RECAST_NO_VENDOR").unwrap_or("false".into()) == "true" {
-    lib_destination = find_recast().unwrap();
+    (lib_destination, include_dirs) = find_recast().unwrap();
   } else if env::var("RECAST_VENDOR").unwrap_or("false".into()) == "true" {
-    lib_destination = build_recast();
+    (lib_destination, include_dirs) = build_recast();
   } else {
-    lib_destination = find_recast().unwrap_or_else(|| build_recast());
+    (lib_destination, include_dirs) =
+      find_recast().unwrap_or_else(|| build_recast());
   }
 
   println!("cargo:rustc-link-search=native={}", lib_destination.display());
@@ -33,11 +35,11 @@ fn main() {
   // Avoid building/linking the inlining lib if only detour/detour_crowd are
   // used (since they have no "inline" definitions).
   if cfg!(any(feature = "recast", feature = "detour_tile_cache")) {
-    build_and_link_inline_lib();
-    generate_inline_bindings();
+    build_and_link_inline_lib(&include_dirs);
+    generate_inline_bindings(&include_dirs);
   }
 
-  generate_recast_bindings();
+  generate_recast_bindings(&include_dirs);
 }
 
 fn is_windows() -> bool {
@@ -73,7 +75,7 @@ fn lib_name_to_file_name(lib_name: &str) -> String {
   }
 }
 
-fn find_recast() -> Option<PathBuf> {
+fn find_recast() -> Option<(PathBuf, Vec<PathBuf>)> {
   let lib = match pkg_config::Config::new().probe("recastnavigation") {
     Ok(value) => value,
     Err(error) => {
@@ -101,7 +103,7 @@ fn find_recast() -> Option<PathBuf> {
     })
     .collect::<Vec<bool>>();
   if check_libs.iter().all(|b| *b) {
-    Some(lib_dir.clone())
+    Some((lib_dir.clone(), lib.include_paths))
   } else {
     let missing_libs = lib_names
       .iter()
@@ -122,7 +124,7 @@ fn find_recast() -> Option<PathBuf> {
   }
 }
 
-fn build_recast() -> PathBuf {
+fn build_recast() -> (PathBuf, Vec<PathBuf>) {
   println!("cargo:rerun-if-changed=recastnavigation");
   let mut lib_builder = Config::new("recastnavigation");
   lib_builder
@@ -130,17 +132,45 @@ fn build_recast() -> PathBuf {
     .define("RECASTNAVIGATION_EXAMPLES", "OFF")
     .define("RECASTNAVIGATION_TESTS", "OFF");
   let lib_destination = lib_builder.build();
-  lib_destination.join("lib")
+  (
+    lib_destination.join("lib"),
+    vec![
+      "recastnavigation/Recast/Include".into(),
+      "recastnavigation/Detour/Include".into(),
+      "recastnavigation/DetourCrowd/Include".into(),
+      "recastnavigation/DetourTileCache/Include".into(),
+    ],
+  )
 }
 
-fn generate_recast_bindings() {
+fn find_in_include_dirs(
+  include_dirs: &[PathBuf],
+  file: &str,
+) -> Option<String> {
+  for include_dir in include_dirs.iter() {
+    let file = include_dir.join(file);
+    if file.exists() {
+      return Some(file.to_string_lossy().into());
+    }
+  }
+
+  None
+}
+
+fn generate_recast_bindings(include_dirs: &[PathBuf]) {
   fn create_bindings(
+    include_dirs: &[PathBuf],
     add_to_builder: impl Fn(bindgen::Builder) -> bindgen::Builder,
     out_file: PathBuf,
   ) {
     let builder = bindgen::Builder::default()
       .parse_callbacks(Box::new(bindgen::CargoCallbacks))
       .clang_args(["-x", "c++"].iter())
+      .clang_args(
+        include_dirs
+          .iter()
+          .map(|include_dir| format!("-I{}", include_dir.display())),
+      )
       .blocklist_file(".*stddef\\.h")
       .blocklist_type("max_align_t");
 
@@ -154,65 +184,89 @@ fn generate_recast_bindings() {
 
   #[cfg(feature = "recast")]
   create_bindings(
-    |builder| builder.header("recastnavigation/Recast/Include/Recast.h"),
+    include_dirs,
+    |builder| {
+      builder.header(
+        find_in_include_dirs(include_dirs, "Recast.h")
+          .expect("Recast.h is present in the include dirs."),
+      )
+    },
     out_path.join("recast.rs"),
   );
 
   #[cfg(feature = "detour")]
   create_bindings(
+    include_dirs,
     |builder| {
       builder
-        .header("recastnavigation/Detour/Include/DetourAlloc.h")
-        .header("recastnavigation/Detour/Include/DetourStatus.h")
-        .header("recastnavigation/Detour/Include/DetourNavMesh.h")
-        .header("recastnavigation/Detour/Include/DetourNavMeshBuilder.h")
-        .header("recastnavigation/Detour/Include/DetourNavMeshQuery.h")
+        .header(
+          find_in_include_dirs(include_dirs, "DetourAlloc.h")
+            .expect("DetourAlloc.h is present in the include dirs."),
+        )
+        .header(
+          find_in_include_dirs(include_dirs, "DetourStatus.h")
+            .expect("DetourStatus.h is present in the include dirs."),
+        )
+        .header(
+          find_in_include_dirs(include_dirs, "DetourNavMesh.h")
+            .expect("DetourNavMesh.h is present in the include dirs."),
+        )
+        .header(
+          find_in_include_dirs(include_dirs, "DetourNavMeshBuilder.h")
+            .expect("DetourNavMeshBuilder.h is present in the include dirs."),
+        )
+        .header(
+          find_in_include_dirs(include_dirs, "DetourNavMeshQuery.h")
+            .expect("DetourNavMeshQuery.h is present in the include dirs."),
+        )
     },
     out_path.join("detour.rs"),
   );
 
   #[cfg(feature = "detour_crowd")]
   create_bindings(
+    include_dirs,
     |builder| {
       builder
-        .header("recastnavigation/DetourCrowd/Include/DetourCrowd.h")
+        .header(
+          find_in_include_dirs(include_dirs, "DetourCrowd.h")
+            .expect("DetourCrowd.h is present in the include dirs."),
+        )
         .blocklist_file(".*DetourAlloc\\.h")
         .blocklist_file(".*DetourNavMesh\\.h")
         .blocklist_file(".*DetourNavMeshQuery\\.h")
         .blocklist_file(".*DetourStatus\\.h")
-        .clang_args(["-Irecastnavigation/Detour/Include"].iter())
     },
     out_path.join("detour_crowd.rs"),
   );
 
   #[cfg(feature = "detour_tile_cache")]
   create_bindings(
+    include_dirs,
     |builder| {
       builder
-        .header("recastnavigation/DetourTileCache/Include/DetourTileCache.h")
         .header(
-          "recastnavigation/DetourTileCache/Include/DetourTileCacheBuilder.h",
+          find_in_include_dirs(include_dirs, "DetourTileCache.h")
+            .expect("DetourTileCache.h is present in the include dirs."),
+        )
+        .header(
+          find_in_include_dirs(include_dirs, "DetourTileCacheBuilder.h")
+            .expect("DetourTileCacheBuilder.h is present in the include dirs."),
         )
         .blocklist_file(".*DetourAlloc\\.h")
         .blocklist_file(".*DetourStatus\\.h")
         .blocklist_type("dtNavMesh")
         .blocklist_type("dtNavMeshCreateParams")
-        .clang_args(["-Irecastnavigation/Detour/Include"].iter())
     },
     out_path.join("detour_tile_cache.rs"),
   );
 }
 
-fn build_and_link_inline_lib() {
+fn build_and_link_inline_lib(include_dirs: &[PathBuf]) {
   println!("cargo:rerun-if-changed=inline_lib_src");
 
   let mut build = cc::Build::new();
-  build
-    .file("inline_lib_src/inline.cc")
-    .include("recastnavigation/Recast/Include")
-    .include("recastnavigation/Detour/Include")
-    .include("recastnavigation/DetourCrowd/Include")
-    .include("recastnavigation/DetourTileCache/Include");
+  build.file("inline_lib_src/inline.cc").includes(include_dirs);
 
   if cfg!(feature = "recast") {
     build.define("RECAST", None);
@@ -233,20 +287,15 @@ fn build_and_link_inline_lib() {
   println!("cargo:rustc-link-lib=static=recast_inline");
 }
 
-fn generate_inline_bindings() {
+fn generate_inline_bindings(include_dirs: &[PathBuf]) {
   let mut builder = bindgen::Builder::default()
     .header("inline_lib_src/inline.h")
     .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+    .clang_args(["-x", "c++"].iter())
     .clang_args(
-      [
-        "-x",
-        "c++",
-        "-Irecastnavigation/Recast/Include",
-        "-Irecastnavigation/Detour/Include",
-        "-Irecastnavigation/DetourCrowd/Include",
-        "-Irecastnavigation/DetourTileCache/Include",
-      ]
-      .iter(),
+      include_dirs
+        .iter()
+        .map(|include_dir| format!("-I{}", include_dir.display())),
     )
     .allowlist_recursively(false)
     .allowlist_file("inline_lib_src/inline.h");
