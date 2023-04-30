@@ -1,4 +1,4 @@
-use std::{env, path::PathBuf};
+use std::{collections::HashMap, env, path::PathBuf};
 
 use cmake::Config;
 
@@ -17,12 +17,13 @@ fn main() {
 
   let lib_destination;
   let include_dirs;
+  let defines;
   if env::var("RECAST_NO_VENDOR").unwrap_or("false".into()) == "true" {
-    (lib_destination, include_dirs) = find_recast().unwrap();
+    (lib_destination, include_dirs, defines) = find_recast().unwrap();
   } else if env::var("RECAST_VENDOR").unwrap_or("false".into()) == "true" {
-    (lib_destination, include_dirs) = build_recast();
+    (lib_destination, include_dirs, defines) = build_recast();
   } else {
-    (lib_destination, include_dirs) =
+    (lib_destination, include_dirs, defines) =
       find_recast().unwrap_or_else(|| build_recast());
   }
 
@@ -35,11 +36,11 @@ fn main() {
   // Avoid building/linking the inlining lib if only detour/detour_crowd are
   // used (since they have no "inline" definitions).
   if cfg!(any(feature = "recast", feature = "detour_tile_cache")) {
-    build_and_link_inline_lib(&include_dirs);
-    generate_inline_bindings(&include_dirs);
+    build_and_link_inline_lib(&include_dirs, &defines);
+    generate_inline_bindings(&include_dirs, &defines);
   }
 
-  generate_recast_bindings(&include_dirs);
+  generate_recast_bindings(&include_dirs, &defines);
 }
 
 fn is_windows() -> bool {
@@ -75,7 +76,8 @@ fn lib_name_to_file_name(lib_name: &str) -> String {
   }
 }
 
-fn find_recast() -> Option<(PathBuf, Vec<PathBuf>)> {
+fn find_recast(
+) -> Option<(PathBuf, Vec<PathBuf>, HashMap<String, Option<String>>)> {
   let lib = match pkg_config::Config::new().probe("recastnavigation") {
     Ok(value) => value,
     Err(error) => {
@@ -103,7 +105,7 @@ fn find_recast() -> Option<(PathBuf, Vec<PathBuf>)> {
     })
     .collect::<Vec<bool>>();
   if check_libs.iter().all(|b| *b) {
-    Some((lib_dir.clone(), lib.include_paths))
+    Some((lib_dir.clone(), lib.include_paths, lib.defines))
   } else {
     let missing_libs = lib_names
       .iter()
@@ -124,7 +126,7 @@ fn find_recast() -> Option<(PathBuf, Vec<PathBuf>)> {
   }
 }
 
-fn build_recast() -> (PathBuf, Vec<PathBuf>) {
+fn build_recast() -> (PathBuf, Vec<PathBuf>, HashMap<String, Option<String>>) {
   println!("cargo:rerun-if-changed=recastnavigation");
   let mut lib_builder = Config::new("recastnavigation");
   lib_builder
@@ -140,6 +142,7 @@ fn build_recast() -> (PathBuf, Vec<PathBuf>) {
       "recastnavigation/DetourCrowd/Include".into(),
       "recastnavigation/DetourTileCache/Include".into(),
     ],
+    HashMap::new(),
   )
 }
 
@@ -157,9 +160,13 @@ fn find_in_include_dirs(
   None
 }
 
-fn generate_recast_bindings(include_dirs: &[PathBuf]) {
+fn generate_recast_bindings(
+  include_dirs: &[PathBuf],
+  defines: &HashMap<String, Option<String>>,
+) {
   fn create_bindings(
     include_dirs: &[PathBuf],
+    defines: &HashMap<String, Option<String>>,
     add_to_builder: impl Fn(bindgen::Builder) -> bindgen::Builder,
     out_file: PathBuf,
   ) {
@@ -171,6 +178,10 @@ fn generate_recast_bindings(include_dirs: &[PathBuf]) {
           .iter()
           .map(|include_dir| format!("-I{}", include_dir.display())),
       )
+      .clang_args(defines.iter().map(|(name, value)| match value {
+        Some(value) => format!("-D{}={}", name, value),
+        None => format!("-D{}", name),
+      }))
       .blocklist_file(".*stddef\\.h")
       .blocklist_type("max_align_t");
 
@@ -185,6 +196,7 @@ fn generate_recast_bindings(include_dirs: &[PathBuf]) {
   #[cfg(feature = "recast")]
   create_bindings(
     include_dirs,
+    defines,
     |builder| {
       builder.header(
         find_in_include_dirs(include_dirs, "Recast.h")
@@ -197,6 +209,7 @@ fn generate_recast_bindings(include_dirs: &[PathBuf]) {
   #[cfg(feature = "detour")]
   create_bindings(
     include_dirs,
+    defines,
     |builder| {
       builder
         .header(
@@ -226,6 +239,7 @@ fn generate_recast_bindings(include_dirs: &[PathBuf]) {
   #[cfg(feature = "detour_crowd")]
   create_bindings(
     include_dirs,
+    defines,
     |builder| {
       builder
         .header(
@@ -243,6 +257,7 @@ fn generate_recast_bindings(include_dirs: &[PathBuf]) {
   #[cfg(feature = "detour_tile_cache")]
   create_bindings(
     include_dirs,
+    defines,
     |builder| {
       builder
         .header(
@@ -262,7 +277,10 @@ fn generate_recast_bindings(include_dirs: &[PathBuf]) {
   );
 }
 
-fn build_and_link_inline_lib(include_dirs: &[PathBuf]) {
+fn build_and_link_inline_lib(
+  include_dirs: &[PathBuf],
+  defines: &HashMap<String, Option<String>>,
+) {
   println!("cargo:rerun-if-changed=inline_lib_src");
 
   let mut build = cc::Build::new();
@@ -281,13 +299,26 @@ fn build_and_link_inline_lib(include_dirs: &[PathBuf]) {
     build.define("DETOUR_TILE_CACHE", None);
   }
 
+  for (name, value) in defines.iter() {
+    build.define(
+      name,
+      match value {
+        Some(value) => Some(value.as_str()),
+        None => None,
+      },
+    );
+  }
+
   build.compile("recast_inline");
 
   println!("cargo:rustc-link-search=native={}", env::var("OUT_DIR").unwrap());
   println!("cargo:rustc-link-lib=static=recast_inline");
 }
 
-fn generate_inline_bindings(include_dirs: &[PathBuf]) {
+fn generate_inline_bindings(
+  include_dirs: &[PathBuf],
+  defines: &HashMap<String, Option<String>>,
+) {
   let mut builder = bindgen::Builder::default()
     .header("inline_lib_src/inline.h")
     .parse_callbacks(Box::new(bindgen::CargoCallbacks))
@@ -297,6 +328,10 @@ fn generate_inline_bindings(include_dirs: &[PathBuf]) {
         .iter()
         .map(|include_dir| format!("-I{}", include_dir.display())),
     )
+    .clang_args(defines.iter().map(|(name, value)| match value {
+      Some(value) => format!("-D{}={}", name, value),
+      None => format!("-D{}", name),
+    }))
     .allowlist_recursively(false)
     .allowlist_file("inline_lib_src/inline.h");
 
