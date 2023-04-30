@@ -1,3 +1,5 @@
+extern crate static_assertions;
+
 #[cfg(feature = "recast")]
 #[allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 mod ffi_recast {
@@ -8,6 +10,12 @@ mod ffi_recast {
 #[allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 mod ffi_detour {
   include!(concat!(env!("OUT_DIR"), "/detour.rs"));
+
+  #[cfg(feature = "detour_large_nav_meshes")]
+  static_assertions::assert_eq_size!(dtPolyRef, u64);
+
+  #[cfg(not(feature = "detour_large_nav_meshes"))]
+  static_assertions::assert_eq_size!(dtPolyRef, u32);
 }
 
 #[cfg(feature = "detour_crowd")]
@@ -292,8 +300,8 @@ mod tests {
     let start_poly_ref = find_poly_ref(&nav_mesh_query, &start_point);
     let end_poly_ref = find_poly_ref(&nav_mesh_query, &end_point);
 
-    assert_eq!(start_poly_ref, 8);
-    assert_eq!(end_poly_ref, 13);
+    assert_eq!(start_poly_ref & 0b111, 0);
+    assert_eq!(end_poly_ref & 0b111, 5);
 
     let query_filter = dtQueryFilter {
       m_areaCost: [1.0; 64],
@@ -320,7 +328,24 @@ mod tests {
       DT_SUCCESS
     );
 
-    assert_eq!(path, [8, 9, 10, 12, 13, 0, 0, 0, 0, 0]);
+    assert_eq!(
+      path
+        .iter()
+        .map(|polyref| if *polyref == 0 { None } else { Some(polyref & 0b111) })
+        .collect::<Vec<_>>(),
+      [
+        Some(0),
+        Some(1),
+        Some(2),
+        Some(4),
+        Some(5),
+        None,
+        None,
+        None,
+        None,
+        None
+      ]
+    );
 
     unsafe { dtFreeNavMeshQuery(nav_mesh_query) };
     unsafe { dtFreeNavMesh(nav_mesh) };
@@ -756,7 +781,17 @@ mod tests {
       DT_SUCCESS
     );
 
-    assert_eq!(path, [16385, 16387, 16384, 0, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(
+      path
+        .iter()
+        .map(|polyref| if *polyref == 0 {
+          None
+        } else {
+          Some(polyref & 0b11111111111111)
+        })
+        .collect::<Vec<_>>(),
+      [Some(1), Some(3), Some(0), None, None, None, None, None, None, None]
+    );
 
     unsafe { dtFreeNavMeshQuery(query) };
     unsafe { dtFreeNavMesh(nav_mesh) };

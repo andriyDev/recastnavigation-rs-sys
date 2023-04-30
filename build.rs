@@ -133,6 +133,17 @@ fn build_recast() -> (PathBuf, Vec<PathBuf>, HashMap<String, Option<String>>) {
     .define("RECASTNAVIGATION_DEMO", "OFF")
     .define("RECASTNAVIGATION_EXAMPLES", "OFF")
     .define("RECASTNAVIGATION_TESTS", "OFF");
+  #[cfg(feature = "detour_large_nav_meshes")]
+  lib_builder.define("RECASTNAVIGATION_DT_POLYREF64", "ON");
+
+  let defines = if cfg!(feature = "detour_large_nav_meshes") {
+    let mut defines = HashMap::new();
+    defines.insert("DT_POLYREF64".to_owned(), None);
+    defines
+  } else {
+    HashMap::new()
+  };
+
   let lib_destination = lib_builder.build();
   (
     lib_destination.join("lib"),
@@ -142,7 +153,7 @@ fn build_recast() -> (PathBuf, Vec<PathBuf>, HashMap<String, Option<String>>) {
       "recastnavigation/DetourCrowd/Include".into(),
       "recastnavigation/DetourTileCache/Include".into(),
     ],
-    HashMap::new(),
+    defines,
   )
 }
 
@@ -184,6 +195,9 @@ fn generate_recast_bindings(
       }))
       .blocklist_file(".*stddef\\.h")
       .blocklist_type("max_align_t");
+
+    #[cfg(feature = "detour_large_nav_meshes")]
+    let builder = builder.clang_args(["-DDT_POLYREF64"]);
 
     let bindings =
       add_to_builder(builder).generate().expect("Unable to generate bindings.");
@@ -347,6 +361,9 @@ fn generate_inline_bindings(
   if cfg!(feature = "detour_tile_cache") {
     builder = builder.clang_args(["-DDETOUR_TILE_CACHE"].iter());
   }
+
+  #[cfg(feature = "detour_large_nav_meshes")]
+  let builder = builder.clang_args(["-DDT_POLYREF64"]);
 
   let bindings = builder.generate().expect("Unable to generate bindings.");
 

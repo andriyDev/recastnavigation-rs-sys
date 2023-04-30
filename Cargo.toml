@@ -13,8 +13,12 @@ links = "Recast"
 [features]
 detour = []
 detour_crowd = ["detour"]
+detour_large_nav_meshes = ["detour"]
 detour_tile_cache = ["detour"]
 recast = []
+
+[dependencies]
+static_assertions = "1.1.0"
 
 [build-dependencies]
 bindgen = "0.64.0"
