@@ -133,7 +133,7 @@ mod tests {
         /*maxError=*/ 0.0,
         /*maxEdgeLen=*/ 0,
         contour_set,
-        rcBuildContoursFlags_RC_CONTOUR_TESS_WALL_EDGES,
+        rcBuildContoursFlags_RC_CONTOUR_TESS_WALL_EDGES as i32,
       )
     });
 
@@ -259,7 +259,9 @@ mod tests {
     let nav_mesh = unsafe { &mut *dtAllocNavMesh() };
     assert_ne!(nav_mesh as *mut dtNavMesh, std::ptr::null_mut());
     assert_eq!(
-      unsafe { nav_mesh.init1(data, data_size, dtTileFlags_DT_TILE_FREE_DATA) },
+      unsafe {
+        nav_mesh.init1(data, data_size, dtTileFlags_DT_TILE_FREE_DATA as i32)
+      },
       DT_SUCCESS
     );
 
@@ -427,7 +429,9 @@ mod tests {
     let nav_mesh = unsafe { &mut *dtAllocNavMesh() };
     assert_ne!(nav_mesh as *mut dtNavMesh, std::ptr::null_mut());
     assert_eq!(
-      unsafe { nav_mesh.init1(data, data_size, dtTileFlags_DT_TILE_FREE_DATA) },
+      unsafe {
+        nav_mesh.init1(data, data_size, dtTileFlags_DT_TILE_FREE_DATA as i32)
+      },
       DT_SUCCESS
     );
 
