@@ -3,14 +3,6 @@ use std::{collections::HashMap, env, path::PathBuf};
 use cmake::Config;
 
 fn main() {
-  #[cfg(not(any(
-    feature = "recast",
-    feature = "detour",
-    feature = "detour_crowd",
-    feature = "detour_tile_cache"
-  )))]
-  compile_error!("At least one feature of 'recast', 'detour', 'detour_crowd', 'detour_tile_cache' should be enabled!");
-
   println!("cargo:rerun-if-env-changed=PROFILE");
   println!("cargo:rerun-if-env-changed=RECAST_NO_VENDOR");
   println!("cargo:rerun-if-env-changed=RECAST_VENDOR");
