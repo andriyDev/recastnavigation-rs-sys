@@ -1,7 +1,7 @@
 [package]
 edition = "2021"
 name = "recastnavigation-sys"
-version = "0.1.0"
+version = "1.0.0"
 
 # recastnavigation bundles several libraries together into a single repo. This
 # would mean splitting this into several crates would require duplicating the
