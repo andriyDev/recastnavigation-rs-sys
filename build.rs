@@ -61,7 +61,7 @@ fn lib_names() -> Vec<String> {
   root_names.push("DetourCrowd");
   #[cfg(feature = "detour_tile_cache")]
   root_names.push("DetourTileCache");
-  if is_windows() && is_debug() {
+  if is_debug() {
     root_names.iter().map(|root| root.to_string() + "-d").collect()
   } else {
     root_names.iter().map(|root| root.to_string()).collect()
