@@ -3,6 +3,19 @@ edition = "2021"
 name = "recastnavigation-sys"
 version = "1.0.0"
 
+description = "Raw FFI bindings for recastnavigation."
+
+license-file = "LICENSE"
+readme = "README.md"
+repository = "https://github.com/andriyDev/recastnavigation-rs-sys"
+
+categories = ["game-development"]
+keywords = ["recast", "detour", "navigation", "mesh", "pathfinding"]
+
+exclude = [
+  ".github/*",
+]
+
 # recastnavigation bundles several libraries together into a single repo. This
 # would mean splitting this into several crates would require duplicating the
 # recastnavigation repo multiple times or horrible modification of CMake files.
