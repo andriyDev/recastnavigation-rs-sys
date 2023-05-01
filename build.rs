@@ -298,7 +298,7 @@ fn build_and_link_inline_lib(
   println!("cargo:rerun-if-changed=inline_lib_src");
 
   let mut build = cc::Build::new();
-  build.file("inline_lib_src/inline.cc").includes(include_dirs);
+  build.cpp(true).file("inline_lib_src/inline.cc").includes(include_dirs);
 
   if cfg!(feature = "recast") {
     build.define("RECAST", None);
