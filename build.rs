@@ -19,6 +19,8 @@ fn main() {
       find_recast().unwrap_or_else(|| build_recast());
   }
 
+  link_cpp_std();
+
   println!("cargo:rustc-link-search=native={}", lib_destination.display());
 
   for lib in lib_names() {
@@ -363,4 +365,26 @@ fn generate_inline_bindings(
   bindings
     .write_to_file(out_path.join("inline.rs"))
     .expect("Couldn't write bindings!");
+}
+
+fn link_cpp_std() {
+  println!("cargo:rerun-if-env-changed=TARGET");
+  let target = env::var("TARGET").expect("TARGET should be provided by Cargo.");
+  let cpp_std = if target.contains("msvc") {
+    None
+  } else if target.contains("apple") {
+    Some("c++".to_string())
+  } else if target.contains("freebsd") {
+    Some("c++".to_string())
+  } else if target.contains("openbsd") {
+    Some("c++".to_string())
+  } else if target.contains("android") {
+    Some("c++_shared".to_string())
+  } else {
+    Some("stdc++".to_string())
+  };
+
+  if let Some(cpp_std) = cpp_std {
+    println!("cargo:rustc-link-lib={}", cpp_std);
+  }
 }
