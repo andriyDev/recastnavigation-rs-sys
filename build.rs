@@ -55,6 +55,18 @@ fn is_debug() -> bool {
   }
 }
 
+fn is_32_bit() -> bool {
+  env::var("TARGET")
+    .expect("TARGET should be provided by Cargo.")
+    .contains("i686")
+}
+
+fn is_nightly() -> bool {
+  env::var("RUSTUP_TOOLCHAIN")
+    .expect("RUSTUP_TOOLCHAIN should be provided by Cargo.")
+    .starts_with("nightly")
+}
+
 fn lib_names() -> Vec<String> {
   let mut root_names = Vec::new();
   #[cfg(feature = "recast")]
@@ -185,7 +197,7 @@ fn generate_recast_bindings(
     add_to_builder: impl Fn(bindgen::Builder) -> bindgen::Builder,
     out_file: PathBuf,
   ) {
-    let builder = bindgen::Builder::default()
+    let mut builder = bindgen::Builder::default()
       .parse_callbacks(Box::new(bindgen::CargoCallbacks))
       .clang_args(["-x", "c++"].iter())
       .clang_args(
@@ -200,8 +212,18 @@ fn generate_recast_bindings(
       .blocklist_file(".*stddef\\.h")
       .blocklist_type("max_align_t");
 
+    if is_windows() && is_32_bit() {
+      if is_nightly() {
+        builder = builder.rust_target(bindgen::RustTarget::Nightly);
+      } else {
+        println!("cargo:warning=Windows 32 bit uses the \"thiscall\" ABI. This feature is not enabled, so compilation may fail! Consider using nightly Rust, which enables this feature.");
+      }
+    }
+
     #[cfg(feature = "detour_large_nav_meshes")]
-    let builder = builder.clang_args(["-DDT_POLYREF64"]);
+    {
+      builder = builder.clang_args(["-DDT_POLYREF64"]);
+    }
 
     let bindings =
       add_to_builder(builder).generate().expect("Unable to generate bindings.");
