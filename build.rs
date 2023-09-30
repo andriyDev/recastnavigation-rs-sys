@@ -42,7 +42,17 @@ fn is_windows() -> bool {
 }
 
 fn is_debug() -> bool {
-  env::var("DEBUG").unwrap() == "true"
+  match &env::var("OPT_LEVEL").unwrap()[..] {
+    "0" => true,
+    "1" | "2" | "3" | "s" | "z" => false,
+    unknown => {
+      println!(
+        "cargo:warning=Unknown opt-level={}, defaulting to release",
+        unknown
+      );
+      false
+    }
+  }
 }
 
 fn lib_names() -> Vec<String> {
