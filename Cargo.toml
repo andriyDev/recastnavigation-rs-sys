@@ -1,7 +1,7 @@
 [package]
 edition = "2021"
 name = "recastnavigation-sys"
-version = "1.0.1"
+version = "1.0.2"
 
 description = "Raw FFI bindings for recastnavigation."
 
