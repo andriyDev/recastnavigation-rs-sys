@@ -198,8 +198,8 @@ fn generate_recast_bindings(
     out_file: PathBuf,
   ) {
     let mut builder = bindgen::Builder::default()
-      .parse_callbacks(Box::new(bindgen::CargoCallbacks))
-      .clang_args(["-x", "c++"].iter())
+      .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+      .clang_args(["-x", "c++", "-fvisibility=default"].iter())
       .clang_args(
         include_dirs
           .iter()
@@ -361,8 +361,8 @@ fn generate_inline_bindings(
 ) {
   let mut builder = bindgen::Builder::default()
     .header("inline_lib_src/inline.h")
-    .parse_callbacks(Box::new(bindgen::CargoCallbacks))
-    .clang_args(["-x", "c++"].iter())
+    .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+    .clang_args(["-x", "c++", "-fvisibility=default"].iter())
     .clang_args(
       include_dirs
         .iter()
@@ -412,6 +412,8 @@ fn link_cpp_std() {
     Some("c++".to_string())
   } else if target.contains("android") {
     Some("c++_shared".to_string())
+  } else if target.contains("wasm32") {
+    None
   } else {
     Some("stdc++".to_string())
   };
