@@ -1,7 +1,7 @@
 [package]
 edition = "2021"
 name = "recastnavigation-sys"
-version = "1.0.2"
+version = "1.0.3"
 
 description = "Raw FFI bindings for recastnavigation."
 
@@ -34,7 +34,7 @@ recast = []
 static_assertions = "1.1.0"
 
 [build-dependencies]
-bindgen = "0.64.0"
-cc = "1.0.79"
-cmake = "0.1.49"
-pkg-config = "0.3.26"
+bindgen = "0.69.1"
+cc = "1.0.83"
+cmake = "0.1.50"
+pkg-config = "0.3.28"
